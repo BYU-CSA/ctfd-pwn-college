@@ -6,6 +6,7 @@ mod pwncollege;
 use std::collections::HashMap;
 
 use ctfd::{CTFdClient, ChallengeSolver, TeamId, TeamPosition};
+use pwncollege::{PWNCollegeClient};
 
 use clap::Parser;
 use rusqlite::Connection;
@@ -35,6 +36,8 @@ struct Args {
     refresh_interval_seconds: u64,
 }
 
+async fn import_challenges_from_module(ctfd_client: &CTFdClient, module: &str) {}
+
 #[tokio::main]
 async fn main() {
     let args = Args::parse();
@@ -55,13 +58,18 @@ async fn main() {
 
     println!("Starting watcher");
 
-    let ctfd_client = CTFdClient::new(args.ctfd_url, args.ctfd_api_key);
+    // let ctfd_client = CTFdClient::new(args.ctfd_url, args.ctfd_api_key);
 
-    // rather than starting an announced solves iter here, we want a way to track what challenges have already been solved by which users... a little more complicated
-    let newchall = ctfd_client.new_challenge("test_chall_create", 5, "test", "hype new flag").await.unwrap();
-    dbg!(newchall);
+    // // rather than starting an announced solves iter here, we want a way to track what challenges have already been solved by which users... a little more complicated
+    // let newchall = ctfd_client.new_challenge("test_chall_create", 5, "test", "hype new flag").await.unwrap();
+    // dbg!(newchall);
 
-    let response = ctfd_client.get_challenges_of_category("test").await.unwrap();
+    // let response = ctfd_client.get_challenges_of_category("test").await.unwrap();
+    // dbg!(response);
+
+    let pwn_college_client = PWNCollegeClient::new();
+
+    let response = pwn_college_client.get_challenges_for_module("web-security").await.unwrap();
     dbg!(response);
     // let mut announced_solves: HashMap<i64, Vec<ChallengeSolver>> = HashMap::new();
 
