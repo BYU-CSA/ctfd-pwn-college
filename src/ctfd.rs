@@ -122,7 +122,7 @@ impl CTFdClient {
         }
     }
 
-    async fn new_flag_for_challenge(&self, id: i64, flag: &str) -> Result<(), reqwest::Error> {
+    async fn new_flag_for_challenge(&self, id: i64, flag: &str) -> Result<(), Box<dyn std::error::Error>> {
         let new_flag = Flag::new(id, &flag);
 
         let url = format!("{}/api/v1/flags", self.url);
@@ -136,16 +136,13 @@ impl CTFdClient {
         if response.status() == 200 {
             Ok(())
         } else {
-            panic!();
+            Err("failed to upload flag for challenge".into())
         }
     }
 
-    pub async fn new_challenge(&self, name: &str, value: i64, category: &str, flag: &str) -> Result<Vec<Challenge>, reqwest::Error> {
+    pub async fn new_challenge(&self, name: &str, value: i64, category: &str, flag: &str) -> Result<(), Box<dyn std::error::Error>> {
         let url = format!("{}/api/v1/challenges", self.url);
         let new_challenge = NewChallenge::new(category, name, value);
-
-        let json_text = serde_json::to_string(&new_challenge).unwrap();
-        println!("JSON body: {}", json_text);
 
         // send the request to make the challenge
         let response = self
@@ -156,19 +153,15 @@ impl CTFdClient {
             .await?;
         
         if response.status() != 200 {
-            eprintln!("Failed to post");
-            dbg!(&response);
-            return Ok(Vec::<Challenge>::new());
+            return Err("Failed to create new challenge".into());
         }
-
+        
         let id = self.get_challenge_id_by_name(&name).await.unwrap();
         dbg!(id);
 
         self.new_flag_for_challenge(id, &flag).await.unwrap();
         
-        // probably will need to process the data, get the new challenge id, and then update the flag through the flag function
-
-        Ok(Vec::<Challenge>::new())
+        Ok(())
     }
 
     pub async fn get_team(&self, team_id: i64) -> Result<Team, reqwest::Error>{
