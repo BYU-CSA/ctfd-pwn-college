@@ -36,7 +36,9 @@ struct Args {
     refresh_interval_seconds: u64,
 }
 
-async fn import_challenges_from_module(ctfd_client: &CTFdClient, module: &str) {}
+async fn import_challenges_from_module(ctfd_client: &CTFdClient, module: &str) {
+    // I'll want to first gather all of the challenge names, then iterate through and add them
+}
 
 #[tokio::main]
 async fn main() {

@@ -140,9 +140,9 @@ impl CTFdClient {
         }
     }
 
-    pub async fn new_challenge(&self, name: &str, value: i64, category: &str, flag: &str) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn new_challenge(&self, name: &str, category: &str, flag: &str) -> Result<(), Box<dyn std::error::Error>> {
         let url = format!("{}/api/v1/challenges", self.url);
-        let new_challenge = NewChallenge::new(category, name, value);
+        let new_challenge = NewChallenge::new(category, name);
 
         // send the request to make the challenge
         let response = self
@@ -213,12 +213,12 @@ impl Challenge {
 }
 
 impl NewChallenge {
-    pub fn new(challenge_category: &str, challenge_name: &str, value: i64) -> Self {
+    pub fn new(challenge_category: &str, challenge_name: &str) -> Self {
         NewChallenge {
             name: challenge_name.to_string(),
             category: challenge_category.to_string(),
             description: String::from(format!("This challenge will be on PWN College in the {} module and will auto-complete here when you solve it there", &challenge_category)),
-            value: value.to_string(),
+            value: 100.to_string(),
             state: String::from("visible"),
             typestr: String::from("standard"),
         }
