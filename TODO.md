@@ -15,9 +15,9 @@ Probably make a separate repo (in BYU CSA) but reference the fact that much of t
 Add a license - MIT
 
 Command line to import challs:
-- `/<dojo>/modules` can get all modules (including all challenges)
-- Just parse through challenges, make a category name, and then create all of the challenges matching the point values
-- CTFd `challenge post-challenge-list`. Make sure to make a standard flag for the specific module and then store that. Make a persistent challenge list of some kind - track flag by category? Vs by challenge?
+- ~~`/<dojo>/modules` can get all modules (including all challenges)~~
+- ~~Just parse through challenges, make a category name, and then create all of the challenges matching the point values~~
+- ~~CTFd `challenge post-challenge-list`. Make sure to make a standard flag for the specific module and then store that. Make a persistent challenge list of some kind - track flag by category? Vs by challenge?~~
 
 Find solves:
 - `/<dojo>/solves?username=` can get you solves for a specific user on a specific dojo
@@ -26,3 +26,13 @@ Find solves:
 
 Update solves:
 - Need to do a submission for the user by hitting CTFd submissions post-submission
+
+
+The flow of the program sucks... what do I need to do and what is the optimal way to do it?
+- Start by checking the sqlite database to gather CTFd state
+    - The internal data structures to rust will *also* track CTFd state. Gathered PWN college state is used for updating that CTFd state only
+- Each iteration will:
+    - Gather the CTFd state of *users existing* (user endpoint) only and make necessary updates to the data structures and sqlite
+    - Gather pwn college state for each user, then check and make sure state matches from before
+        - Make any necessary updates to CTFd for new challenge solves
+        - Potentially also just check solves, and since they come with timestamps, you can convert timestamps so you don't even need to track. Just any in the last 60 seconds should be submitted??? That would make it *really* easy...

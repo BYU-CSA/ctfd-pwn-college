@@ -1,14 +1,18 @@
 #![allow(dead_code)]
 
 mod ctfd;
+mod db;
 mod pwncollege;
 
+use std::collections::{HashMap, HashSet};
+
 use ctfd::{CTFdClient, ChallengeSolver, TeamId, TeamPosition};
+use db::DB;
 use pwncollege::PWNCollegeClient;
 
 use clap::Parser;
 use rand::Rng;
-use rusqlite::{Connection, params};
+use rusqlite::{Connection, Result, params};
 
 /// A Discord webhook bot to announce CTFd solves
 #[derive(Parser, Debug)]
@@ -35,28 +39,66 @@ struct Args {
     refresh_interval_seconds: u64,
 }
 
+// async fn init_db(db_conn: &Connection) {
+//     db_conn
+//         .execute_batch("PRAGMA foreign_keys = ON;")
+//         .expect("Failed to establish foreign keys for sqlite");
+
+//     db_conn
+//         .execute(
+//             r#"CREATE TABLE IF NOT EXISTS challenge_categories (
+//                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+//                 module_id VARCHAR(25),
+//                 flag VARCHAR(80)
+//             );"#,
+//             (),
+//         )
+//         .unwrap();
+
+//     db_conn
+//         .execute(
+//             r#"CREATE TABLE IF NOT EXISTS users (
+//                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+//                 username TEXT NOT NULL UNIQUE
+//             );"#,
+//             (),
+//         )
+//         .unwrap();
+//     db_conn
+//         .execute(
+//             r#"CREATE TABLE IF NOT EXISTS challenges (
+//                 id INTEGER PRIMARY KEY,
+//                 challenge_name TEXT NOT NULL UNIQUE,
+//                 module TEXT NOT NULL
+//             );"#,
+//             (),
+//         )
+//         .unwrap();
+//     db_conn
+//         .execute(
+//             r#"CREATE TABLE IF NOT EXISTS solves (
+//                 user_id INTEGER NOT NULL,
+//                 challenge_id INTEGER NOT NULL,
+
+//                 PRIMARY KEY (user_id, challenge_id),
+//                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+//                 FOREIGN KEY (challenge_id) REFERENCES challenges(id) ON DELETE CASCADE
+//             );"#,
+//             (),
+//         )
+//         .unwrap();
+// }
+
 async fn import_challenges_from_module(
     ctfd_client: &CTFdClient,
     pwn_college_client: &PWNCollegeClient,
-    db_conn: &Connection,
+    db: &mut DB,
     module: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    match db_conn.query_row(
-        "SELECT 1 FROM challenge_categories WHERE module_id = ?1 LIMIT 1",
-        params![&module],
-        |_row| Ok(true),
-    ) {
-        Ok(_) => {
-            eprintln!(
-                "{} already exists in the database. Please manually remove it before re-adding its challenges",
-                &module
-            );
-            return Ok(());
-        }
-        Err(rusqlite::Error::QueryReturnedNoRows) => {}
-        Err(e) => return Err(e.into()),
-    };
-
+    if db.flag_exists(&module).await {
+        eprintln!("Flag already exists for {module}. Please delete it before resubmitting");
+        return Ok(());
+    }
     // I'll want to first gather all of the challenge names, then iterate through and add them
     let challenges = pwn_college_client
         .get_challenges_for_module(&module)
@@ -71,18 +113,17 @@ async fn import_challenges_from_module(
     let flag = hex::encode(rand_flag);
 
     for challenge in &challenges {
-        ctfd_client
+        // make the new challenge on CTFd
+        let id = ctfd_client
             .new_challenge(&challenge, &module_name, &flag)
             .await
-            .unwrap()
+            .unwrap();
+
+        // also add the challenge to the database
+        db.insert_challenge(id, &challenge, &module).await.unwrap();
     }
 
-    db_conn
-        .execute(
-            "INSERT INTO challenge_categories (module_id, flag) VALUES (?1, ?2);",
-            (&module, &flag),
-        )
-        .unwrap();
+    db.insert_flag(&module, &flag).await.unwrap();
 
     Ok(())
 }
@@ -93,12 +134,9 @@ async fn main() {
 
     let pwn_college_client = PWNCollegeClient::new();
     let ctfd_client = CTFdClient::new(args.ctfd_url, args.ctfd_api_key);
+    let mut db = DB::new("ctfd_pwn_college.sqlite3").unwrap();
 
-    let db_conn = Connection::open("ctfd_pwn_college.sqlite3").unwrap();
-
-    db_conn
-        .execute("CREATE TABLE IF NOT EXISTS challenge_categories (id INTEGER PRIMARY KEY AUTOINCREMENT, module_id VARCHAR(25), flag VARCHAR(80));", ())
-        .unwrap();
+    // init_db(&db_conn).await;
 
     // import all the challenges in the module
     if args.import_challenges {
@@ -106,7 +144,7 @@ async fn main() {
         match args.challenges_module {
             // ideally, challenge import will be set up such that
             Some(module) => {
-                import_challenges_from_module(&ctfd_client, &pwn_college_client, &db_conn, &module)
+                import_challenges_from_module(&ctfd_client, &pwn_college_client, &mut db, &module)
                     .await
                     .unwrap();
             }
@@ -133,13 +171,55 @@ async fn main() {
     let pwn_college_client = PWNCollegeClient::new();
 
     let response = pwn_college_client
-        .get_challenges_for_module("web-security")
+        .get_solves_by_user_for_module("intro-to-cybersecurity", "binary-exploitation", "overllama")
         .await
         .unwrap();
-    dbg!(response);
 
     // transform this into a capture of existing challenges / flags
     //  eventually, we'll have two items. The flag vector and then a solves one with a students object or something
+    // let mut username_to_id: HashMap<String, UserId> = HashMap::new();
+    // let mut challenge_name_to_id: HashMap<String, ChallengeId> = HashMap::new();
+
+    // // Main relationships
+    // let mut user_solves: HashMap<UserId, HashSet<ChallengeId>> = HashMap::new();
+
+    // // I *really* should have mapped this out...
+    // // Probably two tables: challenges + users. Then a third to map the many to many relationship of solves
+    // let mut gather_users = db_conn.prepare("SELECT id, username FROM users").unwrap();
+    // let usernames: Vec<(UserId, String)> = gather_users
+    //     .query_map([], |row| {
+    //         Ok((
+    //             row.get::<_, UserId>(0)?,
+    //             row.get::<_, String>(1)?,
+    //         ))
+    //     })
+    //     .unwrap()
+    //     .collect::<Result<Vec<_>, _>>()
+    //     .unwrap();
+
+    // for user_data in usernames {
+    //     username_to_id.insert(user_data.1.to_string(), user_data.0);
+    // }
+
+    // let mut gather_challenges = db_conn.prepare("SELECT id, challenge_name FROM challenges").unwrap();
+    // let challenges: Vec<(ChallengeId, String)> = gather_challenges
+    //     .query_map([], |row| {
+    //         Ok((
+    //             row.get::<_, ChallengeId>(0)?, // id
+    //             row.get::<_, String>(1)?, // challenge_name
+    //         ))
+    //     })
+    //     .unwrap()
+    //     .collect::<Result<Vec<_>, _>>()
+    //     .unwrap();
+
+    // for challenge_data in challenges {
+    //     // both make sure the module exists and insert the inner data
+    //     challenge_name_to_id.insert(challenge_data.1.to_string(), challenge_data.0);
+    // }
+
+    // dbg!(challenge_name_to_id);
+
     // let mut announced_solves: HashMap<i64, Vec<ChallengeSolver>> = HashMap::new();
 
     // // Populate the announced solves hashmap with the existing solves

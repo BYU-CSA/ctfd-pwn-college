@@ -7,7 +7,7 @@ pub struct PWNCollegeClient {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct APIResponse<T> {
+pub struct ModuleAPIResponse<T> {
     pub success: bool,
     pub errors: Option<Vec<String>>, // idk
     pub modules: Option<T>,
@@ -24,6 +24,19 @@ pub struct Module {
 pub struct Challenge {
     pub id: String,
     pub name: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SolvesAPIResponse<T> {
+    pub success: bool,
+    pub errors: Option<Vec<String>>, // idk
+    pub solves: Option<T>,
+}
+
+#[derive(Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
+pub struct Solve {
+    pub module_id: String,
+    pub challenge_id: String,
 }
 
 impl PWNCollegeClient {
@@ -43,14 +56,14 @@ impl PWNCollegeClient {
         }
     }
 
-    pub async fn get_modules_from_dojo(&self, dojo: &str) -> Result<Vec<Module>, reqwest::Error> {
+    async fn get_modules_from_dojo(&self, dojo: &str) -> Result<Vec<Module>, reqwest::Error> {
         let url = format!("{}/pwncollege_api/v1/dojos/{}/modules", self.url, &dojo);
         let response = self
             .client
             .get(&url)
             .send()
             .await?
-            .json::<APIResponse<Vec<Module>>>()
+            .json::<ModuleAPIResponse<Vec<Module>>>()
             .await?;
 
         Ok(response.modules.unwrap())
@@ -86,5 +99,34 @@ impl PWNCollegeClient {
             Some(module) => Ok(module.name.clone()),
             None => Err("Couldn't find module".into()),
         }
+    }
+
+    pub async fn get_solves_by_user_for_module(
+        &self,
+        dojo: &str,
+        module: &str,
+        username: &str,
+    ) -> Result<Vec<String>, reqwest::Error> {
+        let url = format!(
+            "{}/pwncollege_api/v1/dojos/{}/solves?username={}",
+            self.url, &dojo, &username
+        );
+        let response = self
+            .client
+            .get(&url)
+            .send()
+            .await?
+            .json::<SolvesAPIResponse<Vec<Solve>>>()
+            .await?;
+
+        // dbg!(&response.solves.unwrap());
+        let solves = response.solves.unwrap();
+        let target_module_challenges: Vec<&Solve> =
+            solves.iter().filter(|c| c.module_id == module).collect();
+
+        Ok(target_module_challenges
+            .iter()
+            .map(|c| c.challenge_id.clone())
+            .collect())
     }
 }

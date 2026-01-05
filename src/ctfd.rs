@@ -157,13 +157,13 @@ impl CTFdClient {
         name: &str,
         category: &str,
         flag: &str,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> Result<i64, Box<dyn std::error::Error>> {
         // Ensure that no challenge gets double-created
         let challenge_exists = self.get_challenge_id_by_name(&name).await;
         match challenge_exists {
             Ok(id) => {
                 eprintln!("Challenge {} already exists with id {}", &name, id);
-                return Ok(());
+                return Ok(id);
             }
             _ => {}
         }
@@ -182,7 +182,7 @@ impl CTFdClient {
 
         self.new_flag_for_challenge(id, &flag).await.unwrap();
 
-        Ok(())
+        Ok(id)
     }
 
     pub async fn get_team(&self, team_id: i64) -> Result<Team, reqwest::Error> {
