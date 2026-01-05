@@ -72,14 +72,14 @@ impl DB {
         let mut gather_users = self
             .db_conn
             .prepare("SELECT id, username FROM users;")
-            .unwrap();
+            .map_err(|e| format!("Failed to run query on db: {e:?}").to_string())?;
         let usernames: Vec<(UserId, String)> = gather_users
             .query_map([], |row| {
                 Ok((row.get::<_, UserId>(0)?, row.get::<_, String>(1)?))
             })
-            .unwrap()
+            .map_err(|e| format!("Failed to run query on db: {e:?}").to_string())?
             .collect::<Result<Vec<_>, _>>()
-            .unwrap();
+            .map_err(|e| format!("Failed to format queried data: {e:?}").to_string())?;
 
         for user_data in usernames {
             self.user_db.insert(user_data.1.to_string(), user_data.0);
@@ -89,7 +89,7 @@ impl DB {
         let mut gather_challenges = self
             .db_conn
             .prepare("SELECT id, challenge_name, module FROM challenges;")
-            .unwrap();
+            .map_err(|e| format!("Failed to run query on db: {e:?}").to_string())?;
         let challenges: Vec<(ChallengeId, String, String)> = gather_challenges
             .query_map([], |row| {
                 Ok((
@@ -98,9 +98,9 @@ impl DB {
                     row.get::<_, String>(2)?,      // module
                 ))
             })
-            .unwrap()
+            .map_err(|e| format!("Failed to run query on db: {e:?}").to_string())?
             .collect::<Result<Vec<_>, _>>()
-            .unwrap();
+            .map_err(|e| format!("Failed to format queried data: {e:?}").to_string())?;
 
         for challenge_data in challenges {
             // both make sure the module exists and insert the inner data
@@ -114,7 +114,7 @@ impl DB {
         let mut gather_solves = self
             .db_conn
             .prepare("SELECT user_id, challenge_id FROM solves;")
-            .unwrap();
+            .map_err(|e| format!("Failed to run query on db: {e:?}").to_string())?;
         let solves: Vec<(UserId, ChallengeId)> = gather_solves
             .query_map([], |row| {
                 Ok((
@@ -122,9 +122,9 @@ impl DB {
                     row.get::<_, ChallengeId>(1)?,
                 ))
             })
-            .unwrap()
+            .map_err(|e| format!("Failed to run query on db: {e:?}").to_string())?
             .collect::<Result<Vec<_>, _>>()
-            .unwrap();
+            .map_err(|e| format!("Failed to format queried data: {e:?}").to_string())?;
 
         for solve_data in solves {
             self.solves_relation
@@ -137,7 +137,7 @@ impl DB {
         let mut gather_flags = self
             .db_conn
             .prepare("SELECT module_id, flag FROM challenge_categories;")
-            .unwrap();
+            .map_err(|e| format!("Failed to run query on db: {e:?}").to_string())?;
         let flags: Vec<(String, String)> = gather_flags
             .query_map([], |row| {
                 Ok((
@@ -145,9 +145,9 @@ impl DB {
                     row.get::<_, String>(1)?, // flag
                 ))
             })
-            .unwrap()
+            .map_err(|e| format!("Failed to run query on db: {e:?}").to_string())?
             .collect::<Result<Vec<_>, _>>()
-            .unwrap();
+            .map_err(|e| format!("Failed to format queried data: {e:?}").to_string())?;
 
         for flag in flags {
             self.flags.insert(flag.0.to_string(), flag.1.to_string());
@@ -169,8 +169,8 @@ impl DB {
             modules: HashMap::new(),
         };
 
-        db.init_db();
-        db.fill_local_db();
+        db.init_db()?;
+        db.fill_local_db()?;
 
         Ok(db)
     }
@@ -186,12 +186,12 @@ impl DB {
                 "INSERT INTO challenges (id, challenge_name, module) VALUES (?1, ?2, ?3);",
                 (id, &challenge, &module),
             )
-            .unwrap();
+            .map_err(|e| format!("Failed to run query on db: {e:?}").to_string())?;
 
         self.challenge_db.insert(challenge.to_string(), id);
         self.modules
             .insert(challenge.to_string(), module.to_string());
-        
+
         Ok(())
     }
 
@@ -205,7 +205,7 @@ impl DB {
                 "INSERT INTO challenge_categories (module_id, flag) VALUES (?1, ?2);",
                 (&module, &flag),
             )
-            .unwrap();
+            .map_err(|e| format!("Failed to run query on db: {e:?}").to_string())?;
 
         self.modules.insert(module.to_string(), flag.to_string());
         Ok(())

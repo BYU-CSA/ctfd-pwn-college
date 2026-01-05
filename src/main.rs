@@ -39,56 +39,6 @@ struct Args {
     refresh_interval_seconds: u64,
 }
 
-// async fn init_db(db_conn: &Connection) {
-//     db_conn
-//         .execute_batch("PRAGMA foreign_keys = ON;")
-//         .expect("Failed to establish foreign keys for sqlite");
-
-//     db_conn
-//         .execute(
-//             r#"CREATE TABLE IF NOT EXISTS challenge_categories (
-//                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-//                 module_id VARCHAR(25),
-//                 flag VARCHAR(80)
-//             );"#,
-//             (),
-//         )
-//         .unwrap();
-
-//     db_conn
-//         .execute(
-//             r#"CREATE TABLE IF NOT EXISTS users (
-//                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-//                 username TEXT NOT NULL UNIQUE
-//             );"#,
-//             (),
-//         )
-//         .unwrap();
-//     db_conn
-//         .execute(
-//             r#"CREATE TABLE IF NOT EXISTS challenges (
-//                 id INTEGER PRIMARY KEY,
-//                 challenge_name TEXT NOT NULL UNIQUE,
-//                 module TEXT NOT NULL
-//             );"#,
-//             (),
-//         )
-//         .unwrap();
-//     db_conn
-//         .execute(
-//             r#"CREATE TABLE IF NOT EXISTS solves (
-//                 user_id INTEGER NOT NULL,
-//                 challenge_id INTEGER NOT NULL,
-
-//                 PRIMARY KEY (user_id, challenge_id),
-//                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-//                 FOREIGN KEY (challenge_id) REFERENCES challenges(id) ON DELETE CASCADE
-//             );"#,
-//             (),
-//         )
-//         .unwrap();
-// }
-
 async fn import_challenges_from_module(
     ctfd_client: &CTFdClient,
     pwn_college_client: &PWNCollegeClient,
