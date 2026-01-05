@@ -56,12 +56,10 @@ pub struct Team {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct ScoreboardEntry{
+pub struct ScoreboardEntry {
     pub id: i64,
     pub name: String,
 }
-
-
 
 pub(crate) type TeamId = i64;
 pub(crate) type TeamPosition = i64;
@@ -69,13 +67,22 @@ pub(crate) type TeamPosition = i64;
 impl CTFdClient {
     pub fn new(url: String, api_key: String) -> Self {
         let mut headers = header::HeaderMap::new();
-        headers.insert("Content-Type", header::HeaderValue::from_static("application/json"));
+        headers.insert(
+            "Content-Type",
+            header::HeaderValue::from_static("application/json"),
+        );
 
         let auth_value = format!("Token {}", api_key);
-        headers.insert("Authorization", header::HeaderValue::from_str(&auth_value).unwrap());
+        headers.insert(
+            "Authorization",
+            header::HeaderValue::from_str(&auth_value).unwrap(),
+        );
 
         Self {
-            client: reqwest::Client::builder().default_headers(headers).build().unwrap(),
+            client: reqwest::Client::builder()
+                .default_headers(headers)
+                .build()
+                .unwrap(),
             url,
         }
     }
@@ -93,7 +100,10 @@ impl CTFdClient {
         Ok(response.data.unwrap())
     }
 
-    pub async fn get_challenges_of_category(&self, category: &str) -> Result<Vec<Challenge>, reqwest::Error> {
+    pub async fn get_challenges_of_category(
+        &self,
+        category: &str,
+    ) -> Result<Vec<Challenge>, reqwest::Error> {
         let url = format!("{}/api/v1/challenges?category={}", self.url, category);
         let response = self
             .client
@@ -106,7 +116,10 @@ impl CTFdClient {
         Ok(response.data.unwrap())
     }
 
-    async fn get_challenge_id_by_name(&self, name: &str) -> Result<i64, Box<dyn std::error::Error>> {
+    async fn get_challenge_id_by_name(
+        &self,
+        name: &str,
+    ) -> Result<i64, Box<dyn std::error::Error>> {
         let url = format!("{}/api/v1/challenges?name={}", self.url, name);
         let response = self
             .client
@@ -122,17 +135,16 @@ impl CTFdClient {
         }
     }
 
-    async fn new_flag_for_challenge(&self, id: i64, flag: &str) -> Result<(), Box<dyn std::error::Error>> {
+    async fn new_flag_for_challenge(
+        &self,
+        id: i64,
+        flag: &str,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let new_flag = Flag::new(id, &flag);
 
         let url = format!("{}/api/v1/flags", self.url);
-        let response = self
-            .client
-            .post(&url)
-            .json(&new_flag)
-            .send()
-            .await?;
-        
+        let response = self.client.post(&url).json(&new_flag).send().await?;
+
         if response.status() == 200 {
             Ok(())
         } else {
@@ -140,31 +152,40 @@ impl CTFdClient {
         }
     }
 
-    pub async fn new_challenge(&self, name: &str, category: &str, flag: &str) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn new_challenge(
+        &self,
+        name: &str,
+        category: &str,
+        flag: &str,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        // Ensure that no challenge gets double-created
+        let challenge_exists = self.get_challenge_id_by_name(&name).await;
+        match challenge_exists {
+            Ok(id) => {
+                eprintln!("Challenge {} already exists with id {}", &name, id);
+                return Ok(());
+            }
+            _ => {}
+        }
+
         let url = format!("{}/api/v1/challenges", self.url);
         let new_challenge = NewChallenge::new(category, name);
 
         // send the request to make the challenge
-        let response = self
-            .client
-            .post(&url)
-            .json(&new_challenge)
-            .send()
-            .await?;
-        
+        let response = self.client.post(&url).json(&new_challenge).send().await?;
+
         if response.status() != 200 {
             return Err("Failed to create new challenge".into());
         }
-        
+
         let id = self.get_challenge_id_by_name(&name).await.unwrap();
-        dbg!(id);
 
         self.new_flag_for_challenge(id, &flag).await.unwrap();
-        
+
         Ok(())
     }
 
-    pub async fn get_team(&self, team_id: i64) -> Result<Team, reqwest::Error>{
+    pub async fn get_team(&self, team_id: i64) -> Result<Team, reqwest::Error> {
         let url = format!("{}/api/v1/teams/{}", self.url, team_id);
         let response = self
             .client
@@ -198,7 +219,10 @@ impl CTFdClient {
 }
 
 impl Challenge {
-    pub async fn get_solves(&self, client: &CTFdClient) -> Result<Vec<ChallengeSolver>, reqwest::Error> {
+    pub async fn get_solves(
+        &self,
+        client: &CTFdClient,
+    ) -> Result<Vec<ChallengeSolver>, reqwest::Error> {
         let url = format!("{}/api/v1/challenges/{}/solves", client.url, self.id);
         let response = client
             .client
@@ -217,7 +241,10 @@ impl NewChallenge {
         NewChallenge {
             name: challenge_name.to_string(),
             category: challenge_category.to_string(),
-            description: String::from(format!("This challenge will be on PWN College in the {} module and will auto-complete here when you solve it there", &challenge_category)),
+            description: String::from(format!(
+                "This challenge will be on PWN College in the {} module and will auto-complete here when you solve it there",
+                &challenge_category
+            )),
             value: 100.to_string(),
             state: String::from("visible"),
             typestr: String::from("standard"),
@@ -231,7 +258,7 @@ impl Flag {
             content: flag.to_string(),
             data: String::from("case_insensitive"),
             typestr: String::from("static"),
-            challenge: challenge_id
+            challenge: challenge_id,
         }
     }
 }

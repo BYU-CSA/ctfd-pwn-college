@@ -1,16 +1,16 @@
-use serde::{Deserialize, Serialize};
 use reqwest::header;
+use serde::{Deserialize, Serialize};
 
 pub struct PWNCollegeClient {
     client: reqwest::Client,
-    url: String
+    url: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct APIResponse<T> {
     pub success: bool,
     pub errors: Option<Vec<String>>, // idk
-    pub modules: Option<T>
+    pub modules: Option<T>,
 }
 
 #[derive(Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
@@ -29,10 +29,16 @@ pub struct Challenge {
 impl PWNCollegeClient {
     pub fn new() -> Self {
         let mut headers = header::HeaderMap::new();
-        headers.insert("Content-Type", header::HeaderValue::from_static("application/json"));
+        headers.insert(
+            "Content-Type",
+            header::HeaderValue::from_static("application/json"),
+        );
 
         Self {
-            client: reqwest::Client::builder().default_headers(headers).build().unwrap(),
+            client: reqwest::Client::builder()
+                .default_headers(headers)
+                .build()
+                .unwrap(),
             url: "https://pwn.college/".to_string(),
         }
     }
@@ -46,19 +52,39 @@ impl PWNCollegeClient {
             .await?
             .json::<APIResponse<Vec<Module>>>()
             .await?;
-        
+
         Ok(response.modules.unwrap())
     }
 
-    pub async fn get_challenges_for_module(&self, module: &str) -> Result<Vec<String>, Box<dyn std::error::Error>> {
-        let modules = self.get_modules_from_dojo("intro-to-cybersecurity").await.unwrap(); // we're only using the orange belt
+    pub async fn get_challenges_for_module(
+        &self,
+        module: &str,
+    ) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+        let modules = self
+            .get_modules_from_dojo("intro-to-cybersecurity")
+            .await
+            .unwrap(); // we're only using the orange belt
         let target_module = modules.iter().find(|m| m.id == module);
 
         match target_module {
-            Some(module) => {
-                Ok(module.challenges.iter().map(|c| c.name.clone()).collect())
-            },
-            None => Err("Couldn't find module".into())
+            Some(module) => Ok(module.challenges.iter().map(|c| c.name.clone()).collect()),
+            None => Err("Couldn't find module".into()),
+        }
+    }
+
+    pub async fn pretty_print_module(
+        &self,
+        module: &str,
+    ) -> Result<String, Box<dyn std::error::Error>> {
+        let modules = self
+            .get_modules_from_dojo("intro-to-cybersecurity")
+            .await
+            .unwrap(); // we're only using the orange belt
+        let target_module = modules.iter().find(|m| m.id == module);
+
+        match target_module {
+            Some(module) => Ok(module.name.clone()),
+            None => Err("Couldn't find module".into()),
         }
     }
 }
