@@ -210,4 +210,13 @@ impl DB {
         self.modules.insert(module.to_string(), flag.to_string());
         Ok(())
     }
+
+    pub async fn user_exists(&self, username: &str) -> bool {
+        self.user_db.contains_key(username)
+    }
+
+    pub async fn insert_user(&mut self, username: &str) {
+        // add user to objects
+        // make initial fetch of challenges and update their solves accordingly
+    }
 }

@@ -1,3 +1,4 @@
+use chrono::{DateTime, Duration, Utc};
 use reqwest::header;
 use serde::{Deserialize, Serialize};
 
@@ -33,8 +34,9 @@ pub struct SolvesAPIResponse<T> {
     pub solves: Option<T>,
 }
 
-#[derive(Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Eq, Hash, PartialEq, Serialize, Deserialize, Clone)]
 pub struct Solve {
+    pub timestamp: DateTime<Utc>,
     pub module_id: String,
     pub challenge_id: String,
 }
@@ -101,12 +103,12 @@ impl PWNCollegeClient {
         }
     }
 
-    pub async fn get_solves_by_user_for_module(
+    async fn get_solves_by_user_for_module(
         &self,
         dojo: &str,
         module: &str,
         username: &str,
-    ) -> Result<Vec<String>, reqwest::Error> {
+    ) -> Result<Vec<Solve>, reqwest::Error> {
         let url = format!(
             "{}/pwncollege_api/v1/dojos/{}/solves?username={}",
             self.url, &dojo, &username
@@ -121,11 +123,29 @@ impl PWNCollegeClient {
 
         // dbg!(&response.solves.unwrap());
         let solves = response.solves.unwrap();
-        let target_module_challenges: Vec<&Solve> =
-            solves.iter().filter(|c| c.module_id == module).collect();
+        let target_module_challenges: Vec<Solve> = solves
+            .into_iter()
+            .filter(|c| c.module_id == module)
+            .collect();
+
+        Ok(target_module_challenges)
+    }
+
+    pub async fn get_recent_solves_by_user_for_module(
+        &self,
+        dojo: &str,
+        module: &str,
+        username: &str,
+    ) -> Result<Vec<String>, reqwest::Error> {
+        let target_module_challenges = self
+            .get_solves_by_user_for_module(&dojo, &module, &username)
+            .await
+            .unwrap();
+        let base_time = Utc::now() - Duration::minutes(2);
 
         Ok(target_module_challenges
             .iter()
+            .filter(|solve| solve.timestamp >= base_time)
             .map(|c| c.challenge_id.clone())
             .collect())
     }

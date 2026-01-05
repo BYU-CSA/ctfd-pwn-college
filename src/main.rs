@@ -4,15 +4,12 @@ mod ctfd;
 mod db;
 mod pwncollege;
 
-use std::collections::{HashMap, HashSet};
-
-use ctfd::{CTFdClient, ChallengeSolver, TeamId, TeamPosition};
+use ctfd::CTFdClient;
 use db::DB;
 use pwncollege::PWNCollegeClient;
 
 use clap::Parser;
 use rand::Rng;
-use rusqlite::{Connection, Result, params};
 
 /// A Discord webhook bot to announce CTFd solves
 #[derive(Parser, Debug)]
@@ -75,6 +72,11 @@ async fn import_challenges_from_module(
 
     db.insert_flag(&module, &flag).await.unwrap();
 
+    todo!(
+        r#"When you first add challenges, also parse for all time to catch old solves for the modules.
+        "On each user add, you will need to do the same thing."#
+    );
+
     Ok(())
 }
 
@@ -121,9 +123,19 @@ async fn main() {
     let pwn_college_client = PWNCollegeClient::new();
 
     let response = pwn_college_client
-        .get_solves_by_user_for_module("intro-to-cybersecurity", "binary-exploitation", "overllama")
+        .get_recent_solves_by_user_for_module("intro-to-cybersecurity", "web-security", "overllama")
         .await
         .unwrap();
+    dbg!(&response);
+
+    r#"
+    Each tick of the sm should take the following steps:
+        - Gather existing users from CTFd and update as necessary
+        - For each user
+            - Gather solves
+            - Check whether there are solves from the last 2 minutes
+            - Update CTFd accordingly
+    "#;
 
     // transform this into a capture of existing challenges / flags
     //  eventually, we'll have two items. The flag vector and then a solves one with a students object or something
