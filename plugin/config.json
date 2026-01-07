@@ -1,0 +1,6 @@
+{
+    "name": "External Solve Sync",
+    "author": "Macen Bird",
+    "description": "Syncs solves on CTFd with an external entity. For this project, it was pwn.college",
+    "version": "1.0.0"
+}
