@@ -1,0 +1,1 @@
+sqlite3 ./ctfd_pwn_college.sqlite3 "delete from users; delete from solves;"

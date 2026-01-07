@@ -13,6 +13,7 @@ pub struct DB {
     solves_relation: HashMap<UserId, HashSet<ChallengeId>>,
     flags: HashMap<String, String>,   // module, flag,
     modules: HashMap<String, String>, // challenge, module
+    tokens: HashMap<String, String>, // username, API token
 }
 
 impl DB {
@@ -36,7 +37,8 @@ impl DB {
             .execute(
                 r#"CREATE TABLE IF NOT EXISTS users (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    username TEXT NOT NULL UNIQUE
+                    username TEXT NOT NULL UNIQUE,
+                    api_token TEXT NOT NULL UNIQUE,
                 );"#,
                 (),
             )
@@ -46,6 +48,7 @@ impl DB {
                 r#"CREATE TABLE IF NOT EXISTS challenges (
                     id INTEGER PRIMARY KEY,
                     challenge_name TEXT NOT NULL UNIQUE,
+                    challenge_name_pretty TEXT NOT NULL UNIQUE,
                     module TEXT NOT NULL
                 );"#,
                 (),
@@ -73,11 +76,11 @@ impl DB {
         // users
         let mut gather_users = self
             .db_conn
-            .prepare("SELECT id, username FROM users;")
+            .prepare("SELECT id, username, api_token FROM users;")
             .map_err(|e| format!("Failed to run query on db: {e:?}").to_string())?;
-        let usernames: Vec<(UserId, String)> = gather_users
+        let usernames: Vec<(UserId, String, String)> = gather_users
             .query_map([], |row| {
-                Ok((row.get::<_, UserId>(0)?, row.get::<_, String>(1)?))
+                Ok((row.get::<_, UserId>(0)?, row.get::<_, String>(1)?, row.get::<_, String>(2)?))
             })
             .map_err(|e| format!("Failed to run query on db: {e:?}").to_string())?
             .collect::<Result<Vec<_>, _>>()
@@ -85,6 +88,7 @@ impl DB {
 
         for user_data in usernames {
             self.user_db.insert(user_data.1.to_string(), user_data.0);
+            self.tokens.insert(user_data.1.to_string(), user_data.2.to_string());
         }
 
         // challenges
@@ -169,6 +173,7 @@ impl DB {
             solves_relation: HashMap::new(),
             flags: HashMap::new(),
             modules: HashMap::new(),
+            tokens: HashMap::new(),
         };
 
         db.init_db()?;
@@ -181,12 +186,13 @@ impl DB {
         &mut self,
         id: i64,
         challenge: &str,
+        challenge_pretty: &str,
         module: &str,
     ) -> Result<(), String> {
         self.db_conn
             .execute(
-                "INSERT INTO challenges (id, challenge_name, module) VALUES (?1, ?2, ?3);",
-                (id, &challenge, &module),
+                "INSERT INTO challenges (id, challenge_name, challenge_name_pretty, module) VALUES (?1, ?2, ?3, ?4);",
+                (id, &challenge, &challenge_pretty, &module),
             )
             .map_err(|e| format!("Failed to run query on db: {e:?}").to_string())?;
 
@@ -213,14 +219,22 @@ impl DB {
         Ok(())
     }
 
+    async fn get_flag(&mut self, challenge: &str) -> Option<String> {
+        let module = match self.modules.get(challenge) {
+            Some(module) => module,
+            None => return None,
+        };
+        self.flags.get(module).cloned()
+    }
+
     pub async fn user_exists(&self, username: &str) -> bool {
         self.user_db.contains_key(username)
     }
 
-    async fn insert_user(&mut self, username: &str) -> Result<i64, String> {
+    async fn insert_user(&mut self, username: &str, api_token: &str) -> Result<i64, String> {
         // add user via sql
         self.db_conn
-            .execute("INSERT INTO users (username) VALUES (?1);", (&username,))
+            .execute("INSERT INTO users (username, api_token) VALUES (?1);", (&username, &api_token))
             .map_err(|e| format!("Failed to run query on db: {e:?}").to_string())?;
 
         // gather id from new object
@@ -232,17 +246,33 @@ impl DB {
                 |row| row.get(0),
             )
             .map_err(|e| format!("Failed to run query on db: {e:?}").to_string())?;
+        
+        // get the user API token
+        
 
         // add user to objects
         self.user_db.insert(username.to_string(), user_id);
+        self.tokens.insert(username.to_string(), api_token.to_string());
         Ok(user_id)
     }
 
     async fn insert_solve(
         &mut self,
-        challenge_id: ChallengeId,
+        ctfd_client: &CTFdClient,
+        challenge_name: &str,
         user_id: UserId,
+        username: &str,
+        challenge_id: ChallengeId,
     ) -> Result<(), String> {
+        let flag = match self.get_flag(&challenge_name).await {
+            Some(flag) => flag,
+            None => return Err("Failed to get flag for module".to_string()),
+        };
+        ctfd_client
+            .post_submission(challenge_id, &username, &flag)
+            .await
+            .map_err(|e| format!("Failed to post submission: {e:?}").to_string())?;
+
         self.db_conn
             .execute(
                 "INSERT INTO solves (user_id, challenge_id) VALUES (?1, ?2)",
@@ -262,7 +292,10 @@ impl DB {
         ctfd_client: &CTFdClient,
         pwn_college_client: &PWNCollegeClient,
     ) -> Result<(), String> {
-        let api_users = ctfd_client.get_users().await.map_err(|e| format!("Failed to insert user: {e:?}").to_string())?;
+        let api_users = ctfd_client
+            .get_users()
+            .await
+            .map_err(|e| format!("Failed to insert user: {e:?}").to_string())?;
         let previous_users: Vec<String> = self.user_db.iter().map(|x| x.0.clone()).collect();
 
         // quickest compare
@@ -279,31 +312,54 @@ impl DB {
         let modules: Vec<_> = self.flags.iter().map(|x| x.0.clone()).collect();
         for user in new_users {
             // I have to insert the user first and gather the autoincremented id
-            let user_id = self.insert_user(&user).await
+            let user_id = self
+                .insert_user(&user)
+                .await
                 .map_err(|e| format!("Failed to insert user: {e:?}").to_string())?;
             for module in &modules {
                 let all_solved_challenges = pwn_college_client
                     .get_solves_by_user_for_module("intro-to-cybersecurity", &module, &user)
                     .await
-                    .map_err(|e| format!("Failed to get solved challenges for user: {e:?}").to_string())?;
+                    .map_err(|e| {
+                        format!("Failed to get solved challenges for user: {e:?}").to_string()
+                    })?;
 
                 // go ahead and insert solves
                 for challenge in all_solved_challenges {
-                    let pretty_module = pwn_college_client.pretty_print_module(&challenge.challenge_id).await
-                        .map_err(|e| format!("Couldn't get pretty name of challenge: {e:?}").to_string())?;
-                    let challenge_id = match self.challenge_db.get(&pretty_module) {
+                    // let pretty_module = pwn_college_client
+                    //     .pretty_print_module(&challenge.challenge_id)
+                    //     .await
+                    //     .map_err(|e| {
+                    //         format!("Couldn't get pretty name of challenge: {e:?}").to_string()
+                    //     })?;
+                    let challenge_id = match self.challenge_db.get(&challenge.challenge_id) {
                         Some(id) => id,
                         None => {
                             dbg!(&self.challenge_db);
-                            todo!("I need to add the non-pretty challenge name to the db entry... Right now it's breaking because I can't access it via that value");
-                            return Err(format!("Failed to get challenge: {}", &pretty_module).to_string());
+                            // todo!(
+                            //     "I need to add the non-pretty challenge name to the db entry... Right now it's breaking because I can't access it via that value"
+                            // );
+                            return Err(format!(
+                                "Failed to get challenge: {}",
+                                &challenge.challenge_id
+                            )
+                            .to_string());
                         }
                     };
-                    self.insert_solve(user_id, *challenge_id).await
-                        .map_err(|e| format!("Failed to insert solve: {e:?}").to_string())?;
+                    self.insert_solve(
+                        &ctfd_client,
+                        &challenge.challenge_id,
+                        user_id,
+                        &user,
+                        *challenge_id,
+                    )
+                    .await
+                    .map_err(|e| format!("Failed to insert solve: {e:?}").to_string())?;
                 }
             }
         }
+
+        dbg!(&self.solves_relation);
 
         Ok(())
     }

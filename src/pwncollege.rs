@@ -74,7 +74,7 @@ impl PWNCollegeClient {
     pub async fn get_challenges_for_module(
         &self,
         module: &str,
-    ) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+    ) -> Result<Vec<(String, String)>, Box<dyn std::error::Error>> {
         let modules = self
             .get_modules_from_dojo("intro-to-cybersecurity")
             .await
@@ -82,7 +82,11 @@ impl PWNCollegeClient {
         let target_module = modules.iter().find(|m| m.id == module);
 
         match target_module {
-            Some(module) => Ok(module.challenges.iter().map(|c| c.name.clone()).collect()),
+            Some(module) => Ok(module
+                .challenges
+                .iter()
+                .map(|c| (c.id.clone(), c.name.clone()))
+                .collect()),
             None => Err("Couldn't find module".into()),
         }
     }

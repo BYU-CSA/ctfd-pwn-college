@@ -1,5 +1,6 @@
 // Starter code derived from https://github.com/jordanbertasso/ctfd-solve-announcer-discord
 
+use chrono::{DateTime, Utc};
 use reqwest::header;
 use serde::{Deserialize, Serialize};
 
@@ -51,6 +52,7 @@ pub struct Field {
 pub struct User {
     pub name: String,
     pub fields: Vec<Field>,
+    pub id: i64,
 }
 
 #[derive(Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
@@ -69,6 +71,16 @@ pub struct Team {
 pub struct ScoreboardEntry {
     pub id: i64,
     pub name: String,
+}
+
+#[derive(Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
+pub struct Submission {
+    pub challenge_id: i64,
+    pub user_id: i64,
+    pub provided: String,
+    #[serde(rename = "type")]
+    pub typestr: String,
+    pub date: DateTime<Utc>,
 }
 
 impl CTFdClient {
@@ -216,6 +228,54 @@ impl CTFdClient {
             .collect())
         // Ok(Vec::new())
     }
+
+    pub async fn get_user_id_for_user(&self, username: &str) -> Result<i64, reqwest::Error> {
+        let url = format!("{}/api/v1/users?view=admin", self.url);
+        let response = self
+            .client
+            .get(&url)
+            .send()
+            .await? //.text().await?;
+            .json::<APIResponse<Vec<User>>>()
+            .await?;
+
+        let matched_users: Vec<User> = response
+            .data
+            .unwrap()
+            .into_iter()
+            .filter(|user| user.fields.len() > 0 && user.fields.get(0).unwrap().value == username.to_string())
+            .collect();
+
+        if matched_users.len() < 1 {
+            todo!("Return an error here");
+        }
+
+        Ok(matched_users.get(0).expect("Somehow had no entries").id)
+    }
+
+    pub async fn post_submission(
+        &self,
+        challenge_id: i64,
+        username: &str,
+        flag: &str,
+    ) -> Result<(), String> {
+        let real_user_id = self
+            .get_user_id_for_user(&username)
+            .await
+            .map_err(|e| format!("Failed to get user id for user: {e:?}").to_string())?;
+        let submission = Submission::new(challenge_id, real_user_id, flag);
+
+        let url = format!("{}/api/v1/submissions", self.url);
+        let response = self.client.post(&url).json(&submission).send().await
+            .map_err(|e| format!("Failed to send post request: {e:?}").to_string())?;
+
+        if response.status() != 200 {
+            dbg!(response.text().await.unwrap());
+            return Err("Failed to create new challenge".into());
+        }
+
+        Ok(())
+    }
 }
 
 impl Challenge {
@@ -238,7 +298,7 @@ impl Challenge {
 
 impl NewChallenge {
     pub fn new(challenge_category: &str, challenge_name: &str) -> Self {
-        NewChallenge {
+        Self {
             name: challenge_name.to_string(),
             category: challenge_category.to_string(),
             description: String::from(format!(
@@ -252,9 +312,21 @@ impl NewChallenge {
     }
 }
 
+impl Submission {
+    pub fn new(challenge_id: i64, user_id: i64, flag: &str) -> Self {
+        Self {
+            challenge_id,
+            user_id,
+            provided: flag.to_string(),
+            typestr: String::from("string"),
+            date: Utc::now(),
+        }
+    }
+}
+
 impl Flag {
     pub fn new(challenge_id: i64, flag: &str) -> Self {
-        Flag {
+        Self {
             content: flag.to_string(),
             data: String::from("case_insensitive"),
             typestr: String::from("static"),

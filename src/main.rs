@@ -42,10 +42,10 @@ async fn import_challenges_from_module(
     db: &mut DB,
     module: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    if db.flag_exists(&module).await {
-        eprintln!("Flag already exists for {module}. Please delete it before resubmitting");
-        return Ok(());
-    }
+    // if db.flag_exists(&module).await {
+    //     eprintln!("Flag already exists for {module}. Please delete it before resubmitting");
+    //     return Ok(());
+    // }
     // I'll want to first gather all of the challenge names, then iterate through and add them
     let challenges = pwn_college_client
         .get_challenges_for_module(&module)
@@ -62,20 +62,22 @@ async fn import_challenges_from_module(
     for challenge in &challenges {
         // make the new challenge on CTFd
         let id = ctfd_client
-            .new_challenge(&challenge, &module_name, &flag)
+            .new_challenge(&challenge.1, &module_name, &flag)
             .await
             .unwrap();
 
         // also add the challenge to the database
-        db.insert_challenge(id, &challenge, &module).await.unwrap();
+        db.insert_challenge(id, &challenge.0, &challenge.1, &module)
+            .await
+            .unwrap();
     }
 
-    db.insert_flag(&module, &flag).await.unwrap();
+    // db.insert_flag(&module, &flag).await.unwrap();
 
-    todo!(
-        r#"When you first add challenges, also parse for all time to catch old solves for the modules.
-        "On each user add, you will need to do the same thing."#
-    );
+    // todo!(
+    //     r#"When you first add challenges, also parse for all time to catch old solves for the modules.
+    //     "On each user add, you will need to do the same thing."#
+    // );
 
     Ok(())
 }
@@ -120,11 +122,7 @@ async fn main() {
     // let response = ctfd_client.get_challenges_of_category("test").await.unwrap();
     // dbg!(response);
 
-    // let response = pwn_college_client
-    //     .get_recent_solves_by_user_for_module("intro-to-cybersecurity", "web-security", "overllama")
-    //     .await
-    //     .unwrap();
-    // let response = ctfd_client.get_users().await.unwrap();
+    // let response = ctfd_client.get_user_id_for_user("overllama").await.unwrap();
     let response = db
         .get_and_insert_new_users(&ctfd_client, &pwn_college_client)
         .await
