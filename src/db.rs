@@ -1,3 +1,5 @@
+use crate::{CTFdClient, PWNCollegeClient};
+
 use rusqlite::{Connection, Result, params};
 use std::collections::{HashMap, HashSet};
 
@@ -196,7 +198,7 @@ impl DB {
     }
 
     pub async fn flag_exists(&self, module: &str) -> bool {
-        self.modules.contains_key(module)
+        self.flags.contains_key(module)
     }
 
     pub async fn insert_flag(&mut self, module: &str, flag: &str) -> Result<(), String> {
@@ -207,7 +209,7 @@ impl DB {
             )
             .map_err(|e| format!("Failed to run query on db: {e:?}").to_string())?;
 
-        self.modules.insert(module.to_string(), flag.to_string());
+        self.flags.insert(module.to_string(), flag.to_string());
         Ok(())
     }
 
@@ -215,8 +217,94 @@ impl DB {
         self.user_db.contains_key(username)
     }
 
-    pub async fn insert_user(&mut self, username: &str) {
+    async fn insert_user(&mut self, username: &str) -> Result<i64, String> {
+        // add user via sql
+        self.db_conn
+            .execute("INSERT INTO users (username) VALUES (?1);", (&username,))
+            .map_err(|e| format!("Failed to run query on db: {e:?}").to_string())?;
+
+        // gather id from new object
+        let user_id: i64 = self
+            .db_conn
+            .query_row(
+                "SELECT id FROM users WHERE username = ?1",
+                [&username],
+                |row| row.get(0),
+            )
+            .map_err(|e| format!("Failed to run query on db: {e:?}").to_string())?;
+
         // add user to objects
-        // make initial fetch of challenges and update their solves accordingly
+        self.user_db.insert(username.to_string(), user_id);
+        Ok(user_id)
+    }
+
+    async fn insert_solve(
+        &mut self,
+        challenge_id: ChallengeId,
+        user_id: UserId,
+    ) -> Result<(), String> {
+        self.db_conn
+            .execute(
+                "INSERT INTO solves (user_id, challenge_id) VALUES (?1, ?2)",
+                (user_id, challenge_id),
+            )
+            .map_err(|e| format!("Failed to run query on db: {e:?}").to_string())?;
+        self.solves_relation
+            .entry(user_id)
+            .or_insert_with(|| HashSet::new())
+            .insert(challenge_id);
+
+        Ok(())
+    }
+
+    pub async fn get_and_insert_new_users(
+        &mut self,
+        ctfd_client: &CTFdClient,
+        pwn_college_client: &PWNCollegeClient,
+    ) -> Result<(), String> {
+        let api_users = ctfd_client.get_users().await.map_err(|e| format!("Failed to insert user: {e:?}").to_string())?;
+        let previous_users: Vec<String> = self.user_db.iter().map(|x| x.0.clone()).collect();
+
+        // quickest compare
+        let set_previous_users: HashSet<_> = previous_users.iter().collect();
+        let new_users: Vec<_> = api_users
+            .iter()
+            .filter(|user| !set_previous_users.contains(user))
+            .collect();
+        if new_users.len() < 1 {
+            return Ok(());
+        }
+
+        // gather solves for new user
+        let modules: Vec<_> = self.flags.iter().map(|x| x.0.clone()).collect();
+        for user in new_users {
+            // I have to insert the user first and gather the autoincremented id
+            let user_id = self.insert_user(&user).await
+                .map_err(|e| format!("Failed to insert user: {e:?}").to_string())?;
+            for module in &modules {
+                let all_solved_challenges = pwn_college_client
+                    .get_solves_by_user_for_module("intro-to-cybersecurity", &module, &user)
+                    .await
+                    .map_err(|e| format!("Failed to get solved challenges for user: {e:?}").to_string())?;
+
+                // go ahead and insert solves
+                for challenge in all_solved_challenges {
+                    let pretty_module = pwn_college_client.pretty_print_module(&challenge.challenge_id).await
+                        .map_err(|e| format!("Couldn't get pretty name of challenge: {e:?}").to_string())?;
+                    let challenge_id = match self.challenge_db.get(&pretty_module) {
+                        Some(id) => id,
+                        None => {
+                            dbg!(&self.challenge_db);
+                            todo!("I need to add the non-pretty challenge name to the db entry... Right now it's breaking because I can't access it via that value");
+                            return Err(format!("Failed to get challenge: {}", &pretty_module).to_string());
+                        }
+                    };
+                    self.insert_solve(user_id, *challenge_id).await
+                        .map_err(|e| format!("Failed to insert solve: {e:?}").to_string())?;
+                }
+            }
+        }
+
+        Ok(())
     }
 }

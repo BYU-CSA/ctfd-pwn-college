@@ -198,14 +198,18 @@ impl CTFdClient {
     pub async fn get_users(&self) -> Result<Vec<String>, reqwest::Error> {
         // Add ?view=admin to get all users
         let url = format!("{}/api/v1/users?view=admin", self.url);
-        let response = self.client.get(&url).send().await? //.text().await?;
-        .json::<APIResponse<Vec<User>>>()
-        .await?;
-
-        dbg!(&response);
+        let response = self
+            .client
+            .get(&url)
+            .send()
+            .await? //.text().await?;
+            .json::<APIResponse<Vec<User>>>()
+            .await?;
 
         // I can only do this cuz there's only one field
-        Ok(response.data.unwrap()
+        Ok(response
+            .data
+            .unwrap()
             .iter()
             .filter(|user| user.fields.len() > 0)
             .map(|user| user.fields.get(0).unwrap().value.clone())

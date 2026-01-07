@@ -103,7 +103,7 @@ impl PWNCollegeClient {
         }
     }
 
-    async fn get_solves_by_user_for_module(
+    pub async fn get_solves_by_user_for_module(
         &self,
         dojo: &str,
         module: &str,
