@@ -42,6 +42,18 @@ pub struct Flag {
 }
 
 #[derive(Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
+pub struct Field {
+    pub name: String,
+    pub value: String, // the actual username of the user
+}
+
+#[derive(Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
+pub struct User {
+    pub name: String,
+    pub fields: Vec<Field>,
+}
+
+#[derive(Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
 pub struct ChallengeSolver {
     pub account_id: i64,
     pub name: String,
@@ -178,6 +190,27 @@ impl CTFdClient {
         self.new_flag_for_challenge(id, &flag).await.unwrap();
 
         Ok(id)
+    }
+
+    /// Fetches all the user objects from CTFd
+    /// I've set it up such that there's a custom field called PWN College username
+    /// This function fetches those values for all users for which it is configured
+    pub async fn get_users(&self) -> Result<Vec<String>, reqwest::Error> {
+        // Add ?view=admin to get all users
+        let url = format!("{}/api/v1/users?view=admin", self.url);
+        let response = self.client.get(&url).send().await? //.text().await?;
+        .json::<APIResponse<Vec<User>>>()
+        .await?;
+
+        dbg!(&response);
+
+        // I can only do this cuz there's only one field
+        Ok(response.data.unwrap()
+            .iter()
+            .filter(|user| user.fields.len() > 0)
+            .map(|user| user.fields.get(0).unwrap().value.clone())
+            .collect())
+        // Ok(Vec::new())
     }
 }
 

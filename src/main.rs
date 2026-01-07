@@ -122,10 +122,12 @@ async fn main() {
 
     let pwn_college_client = PWNCollegeClient::new();
 
-    let response = pwn_college_client
-        .get_recent_solves_by_user_for_module("intro-to-cybersecurity", "web-security", "overllama")
-        .await
-        .unwrap();
+    // let response = pwn_college_client
+    //     .get_recent_solves_by_user_for_module("intro-to-cybersecurity", "web-security", "overllama")
+    //     .await
+    //     .unwrap();
+    let response = ctfd_client.get_users().await.unwrap();
+
     dbg!(&response);
 
     r#"
