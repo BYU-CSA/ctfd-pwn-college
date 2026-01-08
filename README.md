@@ -6,6 +6,8 @@ So I completely changed this. I wanted a tool that would fetch information from 
 
 The plugin should be placed in the CTFd in `CTFd/plugins/external-solve-sync`. This will ensure that CTFd automatically sources and runs it. It exposes a `/sync` endpoint on the CTFd that can only be run by an admin account that syncs the solves with the remote instance, pwn.college.
 
+Make sure you create the file `modules.txt` in the plugin directory on install, or the sync will fail with a write error.
+
 The program expects both `CTFD_URL` and `CTFD_API_KEY` to be valid environmental variables. You can set these manually or include them in a `.env` file.
 
 ## Other utilities

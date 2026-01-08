@@ -65,12 +65,13 @@ def get_current_modules() -> list[str]:
     module_file = os.path.join(dir_path, 'modules.txt')
 
     with open(module_file, 'r') as f:
-        # SafeLoad prevents execution of arbitrary code in the YAML file
         return f.read().splitlines()
 
 def resolve_external_solves(user: Users) -> int:
     username = get_pwn_college_username(user)
-    queried_solves = Solves.query.filter_by(id=user.account_id).all()
+    # user_id is a foreign key to user: https://github.com/CTFd/CTFd/blob/631459af7817bffe6ac48bec4363d77e54c92d8d/CTFd/models/__init__.py#L939
+    #   (may want to change in the future to =user.id)
+    queried_solves = Solves.query.filter_by(user_id=user.account_id).all()
     old_solves = [Solve.from_ctfd_api(d) for d in queried_solves]
 
     modules = get_current_modules()
