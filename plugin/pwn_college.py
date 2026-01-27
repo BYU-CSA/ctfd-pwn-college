@@ -76,6 +76,6 @@ def challenge_to_pretty(name: str) -> str:
                         db.session.commit()
                         return chall["name"]
 
-        return ""
+        return name
     else:
         return pretty_name.pretty_name
