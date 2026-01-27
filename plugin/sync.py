@@ -80,7 +80,7 @@ def resolve_external_solves(user: Users) -> int:
 
     created = 0
     for solve in new_solves:
-        challenge = Challenges.query.filter_by(name=challenge_to_pretty(solve.challenge_id)).first()
+        challenge = Challenges.query.filter_by(name=solve.challenge_id).first()
         if challenge:
             db.session.add(Solves(
                 user_id = user.id,
