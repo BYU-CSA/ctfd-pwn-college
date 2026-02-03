@@ -2,9 +2,17 @@ import requests
 from dataclasses import dataclass
 from CTFd.models import db
 from .models import PrettyPrinted
+import os
 
 URL = "https://pwn.college"
 dojo = "intro-to-cybersecurity"
+
+def get_current_modules() -> list[str]:
+    dir_path = os.path.dirname(os.path.realpath(__file__))
+    module_file = os.path.join(dir_path, 'modules.txt')
+
+    with open(module_file, 'r') as f:
+        return f.read().splitlines()
 
 @dataclass
 class Solve:
@@ -53,21 +61,30 @@ def get_solves_by_user_for_dojo(
     url = f"{URL}/pwncollege_api/v1/dojos/{dojo}/solves?username={username}"
     response = requests.get(url).json()
 
-    if response["success"]:
-        # edited this to support pretty print
-        return [Solve.from_pwn_college_api(d) for d in response["solves"]]
+    try:
+        if response["success"]:
+            # has timestamp, module_id, challenge_id
+            return [Solve.from_pwn_college_api(d) for d in response["solves"]]
 
-    return []
+        return []
+    except KeyError as e:
+        print(f"KeyError {e} for username {username}")
+        return []
 
+# If a challenge id is duplicated accross modules, this doesn't handle that well
+# However, it's a pretty decent workaround to just ignore modules we don't need
 def challenge_to_pretty(name: str) -> str:
     pretty_name = PrettyPrinted.query.get(name)
     if pretty_name is None:
         url = f"{URL}/pwncollege_api/v1/dojos/{dojo}/modules"
         response = requests.get(url).json()
 
+        loaded_modules = get_current_modules()
         if response["success"]:
             all_data = response["modules"]
             for module in all_data:
+                if module["id"] not in loaded_modules:
+                    continue
                 module_challs = module["challenges"]
                 for chall in module_challs:
                     if chall["id"] == name:
@@ -76,6 +93,6 @@ def challenge_to_pretty(name: str) -> str:
                         db.session.commit()
                         return chall["name"]
 
-        return name
+        return ""
     else:
         return pretty_name.pretty_name

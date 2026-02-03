@@ -3,7 +3,6 @@ from CTFd.utils.decorators import admins_only
 from CTFd.models import db, Users, Challenges, Solves
 from datetime import datetime
 from .pwn_college import *
-import os
 
 sync_blueprint = Blueprint(
     "external_solve_sync",
@@ -60,13 +59,6 @@ def sync_solves() -> Response:
         "created_solves": created,
     }) 
 
-def get_current_modules() -> list[str]:
-    dir_path = os.path.dirname(os.path.realpath(__file__))
-    module_file = os.path.join(dir_path, 'modules.txt')
-
-    with open(module_file, 'r') as f:
-        return f.read().splitlines()
-
 def resolve_external_solves(user: Users) -> int:
     username = get_pwn_college_username(user)
     # user_id is a foreign key to user: https://github.com/CTFd/CTFd/blob/631459af7817bffe6ac48bec4363d77e54c92d8d/CTFd/models/__init__.py#L939
@@ -77,6 +69,7 @@ def resolve_external_solves(user: Users) -> int:
     modules = get_current_modules()
     
     new_solves = list(filter(lambda x: x not in old_solves and x.module_id in modules, get_solves_by_user_for_dojo(username)))
+    print(f"{username}: {new_solves}")
 
     created = 0
     for solve in new_solves:
